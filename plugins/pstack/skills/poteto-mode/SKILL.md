@@ -8,7 +8,7 @@ menu-description: default entry point for any non-trivial task
 
 ## Platform Adaptation
 
-These skills use Claude Code tool names (the `Skill` tool, the `Agent` tool, `AskUserQuestion`) and Claude model slugs (`claude-*`). On Claude Code they work as written. On Codex, read [`references/codex-tools.md`](references/codex-tools.md) for the Codex equivalent of a Claude tool, model, or built-in skill (`run`, `verify`, `plugin-dev:skill-development`). Other runtimes can discover the same Agent Skills tree, but they must use their own tool, model, and configuration equivalents. `codex-tools.md` is not a cross-runtime map.
+These skills use Claude Code tool names (the `Skill` tool, the `Agent` tool, `AskUserQuestion`) and Claude model slugs (`claude-*`). On Claude Code they work as written. On Codex, read [`references/codex-tools.md`](references/codex-tools.md) for the Codex equivalent of a Claude tool, model, or built-in skill (`run`, `verify`, `plugin-dev:skill-development`). On ZCode, read [`references/zcode-tools.md`](references/zcode-tools.md) for the same resolution — most tool names are identical there. Other runtimes can discover the same Agent Skills tree, but they must use their own tool, model, and configuration equivalents. Neither map is a cross-runtime map.
 
 ## Non-negotiables
 

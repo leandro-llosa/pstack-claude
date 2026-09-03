@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
 # SessionStart hook for the pstack plugin: prints the poteto-mode dispatch
-# mandate to stdout, which Claude Code injects as session context directly.
+# mandate to stdout. Claude Code injects raw stdout as session context
+# directly. ZCode parses hook stdout as strict JSON instead (any other shape
+# or extra key fails validation), so there the mandate is wrapped as
+# {"additionalContext": "<mandate>"}. ZCode sets ZCODE_PLUGIN_ROOT for plugin
+# hooks; Claude Code does not, which is how the two paths are told apart.
 # A missing context file fails the hook cleanly instead of injecting noise.
 
 set -euo pipefail
 
-exec cat "$(cd "$(dirname "$0")" && pwd)/session-start-context.md"
+context_file="$(cd "$(dirname "$0")" && pwd)/session-start-context.md"
+
+if [[ -n "${ZCODE_PLUGIN_ROOT:-}" ]]; then
+  mandate="$(cat "$context_file")"
+  mandate="${mandate//\\/\\\\}"
+  mandate="${mandate//\"/\\\"}"
+  mandate="${mandate//$'\n'/\\n}"
+  mandate="${mandate//$'\r'/\\r}"
+  mandate="${mandate//$'\t'/\\t}"
+  printf '{"additionalContext":"%s"}\n' "$mandate"
+else
+  exec cat "$context_file"
+fi

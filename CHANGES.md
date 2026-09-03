@@ -2,6 +2,17 @@
 
 This port applies the Cursor → Claude Code substitutions in skill bodies. Earlier drafts left them flagged; this revision resolves them. A later pass added a Codex build that shares the same skills; see [Codex port](#codex-port) below.
 
+## 0.9.19 — ZCode port as the sixth runtime
+
+ZCode is Claude-compatible at every layer that matters: the SKILL.md format (name/description limits, unknown keys ignored), the agent markdown format, the marketplace manifest shape, and the hooks.json schema with `SessionStart` and `${CLAUDE_PLUGIN_ROOT}` expansion. The port is therefore mostly discovery rather than translation.
+
+- **Manifest.** `plugins/pstack/.zcode-plugin/plugin.json` joins the versioned manifests (ZCode probes it before the Claude and Codex manifests). It declares `skills`, `agents`, and `hooks` components. It deliberately declares **no `commands` component**: ZCode renders user-invocable skills as slash commands itself, so stubs would recreate the duplicate-menu collision the 0.9.13 release removed for Claude Code. `validateZcodeManifest` enforces the name, the component directories, and the absence of `commands` on every generator run.
+- **Execution adapter.** `skills/poteto-mode/references/zcode-tools.md` mirrors `codex-tools.md` section-for-section. Most of the tool table is identity (ZCode ships `Skill`, `Agent`, `AskUserQuestion`, `TodoWrite`, Read/Write/Edit/Bash/WebFetch/WebSearch under the same names). The one real difference: the ZCode `Agent` tool has no `model` parameter, so there is no per-subagent model selection and no `/setup-pstack` override mechanism — the Model names section (stamped from `models.json`'s new `zcode` block) documents that degradation instead of pretending parity: panels run on the session model and keep their diversity in the briefs. Every platform note that pointed at `codex-tools.md` on Codex now carries the parallel `zcode-tools.md` sentence.
+- **Hook output.** Claude Code injects raw hook stdout as context; ZCode parses stdout as strict JSON and discards anything else as a failed hook. `hooks/session-start` now detects the runtime by `ZCODE_PLUGIN_ROOT` (set for ZCode plugin hooks, not by Claude Code) and emits `{"additionalContext": "<mandate>"` there; without it the output stays byte-identical to the Claude Code path. `hooks.json` and `run-hook.cmd` are unchanged.
+- **Boundary.** `validateProsePaths` learns the `.zcode-plugin/` prefix, so a future skill telling the reader to open the ZCode manifest fails generation instead of shipping an unreachable path. The link walker also skips `node_modules` now, matching the generator's slug walk: running the vendored-script tests locally bootstraps `scripts/node_modules/`, and third-party READMEs there broke the link check on any machine that had done so.
+
+The ZCode path is verified on a live 0.16.5 session: local-directory marketplace, install as `pstack@pstack-claude` 0.9.19, all 52 skills invocable, both subagents dispatchable, zero commands, and the mandate injected from the hook's JSON output.
+
 ## 0.9.18 — plugin author names the port maintainer
 
 `plugin.json` and the marketplace entry listed Lauren Tan as `author`, so the Claude Code plugin UI credited the upstream author for the port. The `author` and `owner` fields now name Michael Denyer with an email and GitHub URL. Lauren Tan's authorship of the original pstack stays in every description, the README, and the vendored license texts.

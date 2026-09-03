@@ -7,7 +7,10 @@ import { pathToFileURL } from "node:url";
 function markdownFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return markdownFiles(path);
+    // node_modules is gitignored local state (the vendored scripts bootstrap
+    // it); third-party READMEs there are not part of the skills tree, same
+    // exclusion the generator's slug walk applies.
+    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : markdownFiles(path);
     return entry.name.endsWith(".md") ? [path] : [];
   });
 }
@@ -51,7 +54,7 @@ export function pathIsInside(root, path) {
 // install. A markdown link to one is caught by validateSkillsTree; a backticked
 // path in prose is not, which is how codex-tools.md came to tell the reader to
 // open agents/comment-sicko.md.
-const UNREACHABLE_PREFIXES = ["agents/", "hooks/", "commands/", ".codex-plugin/", ".claude-plugin/"];
+const UNREACHABLE_PREFIXES = ["agents/", "hooks/", "commands/", ".codex-plugin/", ".claude-plugin/", ".zcode-plugin/"];
 
 // Only a direct instruction to open the path is a defect. Skills legitimately
 // mention these directories to explain what a runtime ships.
