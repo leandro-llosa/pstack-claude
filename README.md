@@ -1,6 +1,6 @@
-# pstack for Claude Code, Codex, Prime Agent, opencode, and Gemini CLI
+# pstack for Claude Code, Codex, Prime Agent, opencode, Gemini CLI, and ZCode
 
-Claude Code port of [poteto](https://x.com/poteto)'s [pstack](https://github.com/cursor/plugins/tree/main/pstack) plugin. The skill tree is synced against upstream `4612556`, pstack v0.14.2. See [What's deliberately not ported](#whats-deliberately-not-ported). The same `skills/` tree ships as a Codex plugin and is discovered natively by [Prime Agent](https://github.com/PrimeIntellect-ai/prime-agent), [opencode](#opencode), and [Gemini CLI](#gemini-cli). Original by Lauren Tan; ships MIT. Imports seven skills from [cursor-team-kit](https://github.com/cursor/plugins/tree/main/cursor-team-kit) (also MIT): `deslop`, `thermo-nuclear-code-quality-review`, `make-pr-easy-to-review`, `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `what-did-i-get-done`.
+Claude Code port of [poteto](https://x.com/poteto)'s [pstack](https://github.com/cursor/plugins/tree/main/pstack) plugin. The skill tree is synced against upstream `4612556`, pstack v0.14.2. See [What's deliberately not ported](#whats-deliberately-not-ported). The same `skills/` tree ships as Codex and ZCode plugins and is discovered natively by [Prime Agent](https://github.com/PrimeIntellect-ai/prime-agent), [opencode](#opencode), and [Gemini CLI](#gemini-cli). Original by Lauren Tan; ships MIT. Imports seven skills from [cursor-team-kit](https://github.com/cursor/plugins/tree/main/cursor-team-kit) (also MIT): `deslop`, `thermo-nuclear-code-quality-review`, `make-pr-easy-to-review`, `fix-ci`, `fix-merge-conflicts`, `get-pr-comments`, `what-did-i-get-done`.
 
 > if you want to go fast, go deep first. pstack helps you write less, but higher quality code. rigorous agent workflows you can parallelize with confidence.
 
@@ -21,7 +21,7 @@ From 0.9.5 the plugin auto-fires, the same way superpowers does: a `SessionStart
 
 ### Shared Agent Skills install
 
-Codex, Prime Agent, opencode, and Gemini CLI all discover user skills from `~/.agents/skills/`. Clone the repository and link its shared skill tree once:
+Codex, Prime Agent, opencode, Gemini CLI, and ZCode all discover user skills from `~/.agents/skills/` (ZCode also reads `~/.zcode/skills/`). Clone the repository and link its shared skill tree once:
 
 ```shell
 git clone https://github.com/michael-denyer/pstack-claude
@@ -42,7 +42,7 @@ npx skills add https://github.com/michael-denyer/pstack-claude/tree/main/plugins
 
 `plugins/pstack/skills` is a supported installation boundary. Everything a skill reads at runtime lives inside it, including the `poteto-agent` and `comment-sicko` definitions under `poteto-mode/references/agents/` and the MIT terms under `poteto-mode/references/licenses/`. Both directories sit inside a skill because the CLI installs skill directories and drops loose files at the tree root. The generator stamps exactly five portable assets from the sources declared in `PORTABLE_ASSETS` and removes stale output from those two generated directories. It rejects missing or escaping local Markdown links and direct instructions to open paths outside the skills tree. The `Skills-only install` CI job copies the tree with the CLI, compares every installed file with the source, and runs the same validation against the installed tree.
 
-Three plugin features do not survive a skills-only install, because they belong to a specific runtime rather than to the skills. Claude Code's `SessionStart` auto-fire lives in `hooks/`, the Codex slash-command stubs live in `.codex-plugin/prompts/`, and Claude Code's native subagent registration reads `agents/`. On a skills-only install, dispatch `comment-sicko` by pointing the runtime's agent primitive at `poteto-mode/references/agents/comment-sicko.md`.
+Three plugin features do not survive a skills-only install, because they belong to a specific runtime rather than to the skills. The `SessionStart` auto-fire lives in `hooks/` and fires on Claude Code and ZCode, the Codex slash-command stubs live in `.codex-plugin/prompts/`, and native subagent registration reads `agents/` on Claude Code and ZCode. On a skills-only install, dispatch `comment-sicko` by pointing the runtime's agent primitive at `poteto-mode/references/agents/comment-sicko.md`.
 
 ### Codex
 
@@ -84,9 +84,24 @@ The opencode path is verified on a live opencode 1.18.25 session. It discovers a
 
 [Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/using-agent-skills.md) has native Agent Skills. It discovers user skills from `~/.gemini/skills/` or the `~/.agents/skills/` compatibility alias. Use the [shared Agent Skills install](#shared-agent-skills-install), then run `/skills list` to inspect discovery or `/skills reload` after changing a linked file. Ask Gemini to use `poteto-mode`; its `activate_skill` tool loads the skill and its resources.
 
-The Gemini path follows published Gemini CLI documentation and has not been run on a live session. Neither Gemini CLI nor opencode gets generated command files. Native discovery keeps each `SKILL.md`, its references, and its scripts attached to one installed directory, so the skills work from the repository where the user actually needs them.
+The Gemini path follows published Gemini CLI documentation and has not been run on a live session. Neither Gemini CLI, opencode, nor ZCode gets generated command files — like Claude Code, ZCode renders user-invocable skills in its slash menu itself, and generated stubs would recreate the duplicate-menu collision the 0.9.13 release removed for Claude Code. Native discovery keeps each `SKILL.md`, its references, and its scripts attached to one installed directory, so the skills work from the repository where the user actually needs them.
 
-Discovery is not a promise that Claude-specific execution details translate automatically. The skill bodies retain Claude Code tool names, `claude-*` model slugs, and Claude built-in skills. [`codex-tools.md`](plugins/pstack/skills/poteto-mode/references/codex-tools.md) maps those names on Codex only. Gemini CLI, opencode, and Prime Agent must use their own tool, model, and configuration equivalents. Delegation-heavy and multi-model workflows remain unverified on those runtimes. None has a plugin-hook equivalent of the Claude Code auto-fire hook, so ask the runtime to use `poteto-mode` explicitly.
+### ZCode
+
+ZCode is Claude-compatible at every layer pstack touches: the same SKILL.md format (unknown frontmatter keys such as `user-invocable: false` are ignored), the same agent markdown format, the same marketplace manifest shape, and the same hooks.json schema including `SessionStart` and `${CLAUDE_PLUGIN_ROOT}` expansion. The plugin carries a `.zcode-plugin/plugin.json` manifest declaring `skills/`, `agents/`, and `hooks/`; ZCode probes it before the Claude and Codex manifests. The one real incompatibility was hook output — ZCode parses hook stdout as strict JSON rather than injecting it raw — and `hooks/session-start` now detects the runtime and emits `{"additionalContext": ...}` there while staying byte-identical under Claude Code.
+
+Two install paths:
+
+- **Plugin install.** Add this repository as a marketplace in ZCode (Settings → Plugin Management → Discover → `+`, which accepts a GitHub repository or a local directory) and install `pstack`. The plugin install adds what a skills-only install cannot: the `SessionStart` auto-fire and native registration of `poteto-agent` and `comment-sicko` as dispatchable subagents.
+- **Skills-only.** Use the [shared Agent Skills install](#shared-agent-skills-install); ZCode discovers `~/.agents/skills/` as well as its own `~/.zcode/skills/`. Dispatch subagents by pointing `general-purpose` at the vendored copies under `poteto-mode/references/agents/`.
+
+ZCode, like opencode, ignores `user-invocable: false`, so all 52 skills (the 31 public workflows and the 21 `principle-*` leaves) list as triggerable; the leaves stay installed because `poteto-mode` reads them by path. ZCode serves user-invocable skills as slash commands itself (`/tdd` routes to the skill through the Skill tool), so the port ships no generated ZCode command stubs. Tool, model, and Claude built-in resolution lives in [`zcode-tools.md`](plugins/pstack/skills/poteto-mode/references/zcode-tools.md) — mostly identity, since ZCode ships the same tool names, except that the ZCode `Agent` tool has no `model` parameter: panels run on the session model, and `/setup-pstack`'s per-role sheet takes its ZCode form as `~/.zcode/pstack-roles.md`, routing each role to a `subagent_type` list (panel roles fan out one subagent per entry) that the skills read on demand.
+
+**Benny on ZCode.** Upstream's `automations/benny/` pack — Slack issue triage plus reproduce-and-fix — ships at [`plugins/pstack/automations/benny/`](plugins/pstack/automations/benny/), its Cursor event triggers translated to ZCode scheduled automations: each automation's prompt polls the source channel for new work (state kept under `.zcode/benny/`) and registers through the Cron tools. The pack stays dormant by design, as upstream: no slash skills and no manifest component. Set it up from a clone of this repository by pointing an agent at the pack's `FOR_AGENTS.md`; the setup copies the pack into the target repository at `.zcode/automations/benny/` and verifies the shared pstack skills resolve for fresh sessions there. On Claude Code the pack has no adapted trigger runtime and remains dormant.
+
+The ZCode path is verified on a live session (runtime 0.16.5, desktop 3.10.2): this repository registered as a local-directory marketplace and `pstack` installed through the runtime's own install operation — the same one the Discover tab's **Get** button drives — as `pstack@pstack-claude` 0.9.19, the version read from `.zcode-plugin/plugin.json`. In the live session all 52 skills were invocable (leaves included, confirming the `user-invocable` caveat), both subagents (`pstack:poteto-agent`, `pstack:comment-sicko`) were dispatchable agent types, the plugin contributed zero commands, and the `SessionStart` hook fired with the mandate injected as `SessionStart hook additional context` — the strict-JSON `additionalContext` shape accepted as documented, no adaptation needed. The GitHub-repo marketplace source is the same install mechanism with a different source kind and was not exercised separately. Teardown: uninstall from Settings → Plugin Management (or `zcode plugins uninstall pstack@pstack-claude`) and remove the `pstack-claude` marketplace.
+
+Discovery is not a promise that Claude-specific execution details translate automatically. The skill bodies retain Claude Code tool names, `claude-*` model slugs, and Claude built-in skills. [`codex-tools.md`](plugins/pstack/skills/poteto-mode/references/codex-tools.md) maps those names on Codex and [`zcode-tools.md`](plugins/pstack/skills/poteto-mode/references/zcode-tools.md) on ZCode. Gemini CLI, opencode, and Prime Agent must use their own tool, model, and configuration equivalents. Delegation-heavy and multi-model workflows remain unverified on those runtimes. None of those three has a plugin-hook equivalent of the Claude Code auto-fire hook, so ask the runtime to use `poteto-mode` explicitly.
 
 ## Layout
 
@@ -98,14 +113,17 @@ Discovery is not a promise that Claude-specific execution details translate auto
 ├── plugins/pstack/                   # the plugin itself
 │   ├── .claude-plugin/plugin.json    # Claude Code manifest
 │   ├── .codex-plugin/plugin.json     # Codex manifest (skills: ./skills/)
-│   ├── skills/                       # 52 Agent Skills (shared by all five runtimes; the skills-only install boundary)
+│   ├── .zcode-plugin/plugin.json     # ZCode manifest (skills, agents, hooks; no commands)
+│   ├── skills/                       # 52 Agent Skills (shared by all six runtimes; the skills-only install boundary)
 │   │   ├── poteto-mode/references/licenses/  # generated license texts and skills-scoped notice
 │   │   ├── poteto-mode/references/codex-tools.md  # Claude→Codex tool/model/skill map
+│   │   ├── poteto-mode/references/zcode-tools.md  # Claude→ZCode tool/model/skill map
 │   │   ├── poteto-mode/references/agents/  # generated copies of agents/, for runtimes that install only skills
 │   │   └── poteto-mode/scripts/      # vendored bun/bash tooling: watch-pr, orch, worktree-audit.sh
 │   ├── .codex-plugin/prompts/        # 31 slash command stubs, generated (Codex only; link into ~/.codex/prompts)
-│   ├── hooks/                        # SessionStart auto-fire: injects the poteto-mode mandate (Claude Code only)
-│   └── agents/                       # Claude subagents: poteto-agent, comment-sicko (Codex routes via codex-tools.md)
+│   ├── hooks/                        # SessionStart auto-fire: injects the poteto-mode mandate (Claude Code raw, ZCode JSON)
+│   ├── agents/                       # Claude subagents: poteto-agent, comment-sicko (ZCode registers them; Codex routes via codex-tools.md)
+│   └── automations/benny/            # dormant Slack triage + repro automation pack (ZCode scheduled automations; not a manifest component)
 ├── tests/skill-collision-repro.sh    # layout and flag invariants (needs claude CLI)
 ├── tests/agent-skills.test.mjs       # shared metadata, portable assets, path checks, and Codex prompt boundary
 ├── tools/generate.mjs                # stamps versioned, model, prompt, README, and portable-asset copies
@@ -268,7 +286,7 @@ The port is editorial, not mechanical. Anywhere upstream pstack assumed Cursor-s
 
 ### What's deliberately not ported
 
-- **`automations/benny/`** (upstream `0452e08`, the only pstack change between `e46364b` and v0.10.0) — a dormant Slack issue-triage and reproduce-and-fix automation pack built on Cursor's event-triggered automations. It registers no slash skills even upstream, so excluding it changes nothing about the ported plugin's behavior. Porting it would mean translating Cursor's event-trigger runtime to Claude Code's polling-based scheduled agents plus Slack and tracker plumbing — speculative infrastructure with no local user. Revisit if an unattended issue-intake stream materialises; the likely first step is porting the triage skill onto a single Claude scheduled agent, not the whole pack.
+- **`automations/benny/` on Claude Code** — the pack itself now ships (see [ZCode](#zcode), where its triggers are adapted to scheduled automations), but no Claude Code trigger runtime has been adapted for it, so on Claude Code it stays dormant exactly as upstream.
 - **`docs/guide/`** (upstream `02c03a9`, `0b7ef5b`, `424829e`) — the ten-chapter usage tutorial and its six screenshots (2.3 MB). It teaches pstack through Cursor's UI, sticky mode, and cloud agents, so a faithful port would be a rewrite rather than a sync, and none of it ships as skill content. Read it upstream at [cursor/plugins/pstack/docs/guide](https://github.com/cursor/plugins/tree/main/pstack/docs/guide); the concepts map through the substitution table above. Revisit if the port grows its own tutorial.
 - **Sticky mode** (upstream `#144`) — Cursor-only `mode`/`icon`/`color`/`reminder` frontmatter with no Claude Code equivalent. The port's 0.9.5 SessionStart hook is the analog and already carries the non-trivial / trivial / opt-out logic.
 - **`is_background: true` on `poteto-agent`** (upstream `99559f2`) — Cursor subagent frontmatter. Claude Code's agent frontmatter has no such key, and `run_in_background: true` on the spawning `Agent` call already covers it.

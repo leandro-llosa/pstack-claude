@@ -5,12 +5,14 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 import {
   agentSkills,
@@ -18,12 +20,15 @@ import {
   promptStub,
   publicSkills,
   syncPortableAssets,
+  validateZcodeManifest,
+  zcodeModelNamesSection,
 } from "../tools/generate.mjs";
 import { validateProsePaths, validateSkillsTree } from "../tools/validate-skills.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const skillsDir = join(repoRoot, "plugins/pstack/skills");
 const agentsDir = join(repoRoot, "plugins/pstack/agents");
+const pluginDir = join(repoRoot, "plugins/pstack");
 const requiredPortableFiles = [
   "poteto-mode/references/agents/comment-sicko.md",
   "poteto-mode/references/agents/poteto-agent.md",
@@ -294,5 +299,79 @@ describe("shared Agent Skills tree", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("ZCode build", () => {
+  const models = JSON.parse(readFileSync(join(pluginDir, "models.json"), "utf8"));
+
+  test("the ZCode manifest is a valid component declaration stamped with the version", () => {
+    const text = readFileSync(join(pluginDir, ".zcode-plugin/plugin.json"), "utf8");
+    expect(text.match(/"version"\s*:/g)?.length).toBe(1);
+    expect(() =>
+      validateZcodeManifest(text, {
+        expectedName: "pstack",
+        dirExists: (p) => {
+          const full = join(pluginDir, p);
+          return existsSync(full) && statSync(full).isDirectory();
+        },
+      }),
+    ).not.toThrow();
+    const manifest = JSON.parse(text);
+    expect(manifest.version).toBe(readFileSync(join(repoRoot, "VERSION"), "utf8").trim());
+    expect(manifest.commands).toBeUndefined();
+  });
+
+  test("ZCode manifest validation rejects commands components, broken paths, and name drift", () => {
+    const dirExists = () => true;
+    expect(() =>
+      validateZcodeManifest('{"name":"pstack","skills":"./skills/","commands":"./commands/"}', {
+        expectedName: "pstack",
+        dirExists,
+      }),
+    ).toThrow('declares "commands"');
+    expect(() =>
+      validateZcodeManifest('{"name":"pstack","skills":"./nowhere/"}', {
+        expectedName: "pstack",
+        dirExists: () => false,
+      }),
+    ).toThrow('"skills"');
+    expect(() =>
+      validateZcodeManifest('{"name":"other","skills":"./skills/"}', {
+        expectedName: "pstack",
+        dirExists,
+      }),
+    ).toThrow("name");
+  });
+
+  test("zcode-tools.md ships the execution adapter inside the skills tree", () => {
+    const path = join(skillsDir, "poteto-mode/references/zcode-tools.md");
+    const text = readFileSync(path, "utf8");
+    expect(text).toContain("# ZCode tool mapping for pstack");
+    expect(text).toContain(`## Model names\n\n${zcodeModelNamesSection(models)}\n`);
+    expect(text).toContain(models.zcode.singleRoleExample);
+    expect(readFileSync(join(skillsDir, "poteto-mode/SKILL.md"), "utf8")).toContain(
+      "[`references/zcode-tools.md`](references/zcode-tools.md)",
+    );
+  });
+
+  test("the SessionStart hook emits strict JSON for ZCode and raw markdown for Claude Code", () => {
+    const script = join(pluginDir, "hooks/session-start");
+    const context = readFileSync(join(pluginDir, "hooks/session-start-context.md"), "utf8");
+
+    const claudeEnv = { ...process.env };
+    delete claudeEnv.ZCODE_PLUGIN_ROOT;
+    const claude = spawnSync(script, [], { env: claudeEnv });
+    expect(claude.status).toBe(0);
+    expect(claude.stdout.toString()).toBe(context);
+
+    const zcode = spawnSync(script, [], {
+      env: { ...process.env, ZCODE_PLUGIN_ROOT: pluginDir },
+    });
+    expect(zcode.status).toBe(0);
+    const parsed = JSON.parse(zcode.stdout.toString());
+    expect(Object.keys(parsed)).toEqual(["additionalContext"]);
+    expect(parsed.additionalContext).toContain("You have pstack.");
+    expect(parsed.additionalContext).toBe(context.replace(/\n+$/, ""));
   });
 });

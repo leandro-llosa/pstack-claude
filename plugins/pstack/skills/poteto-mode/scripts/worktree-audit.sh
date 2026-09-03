@@ -31,7 +31,9 @@ command -v rg >/dev/null || echo "warn: rg not found; LAST_CHAT column will be e
 # Transcripts: ~/.claude/projects/<encoded-cwd>/<uuid>.jsonl, where <encoded-cwd> is a
 # session's cwd with every "/" turned into "-". A session run inside a worktree lives
 # under that worktree's own directory, so scan the whole projects tree, not one repo's.
-transcripts="$HOME/.claude/projects"
+# PSTACK_TRANSCRIPTS_DIR repoints the scan at another runtime's session tree (ZCode
+# keeps its rollout files under ~/.zcode/cli).
+transcripts="${PSTACK_TRANSCRIPTS_DIR:-$HOME/.claude/projects}"
 now=$(date +%s)
 
 printf "SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE\n"

@@ -5,18 +5,19 @@
 // so a stale committed copy fails the build instead of shipping.
 //
 // Sources of truth:
-//   VERSION  -> the "version" field in the three plugin manifests
+//   VERSION  -> the "version" field in the four plugin manifests
 //   CHANGES.md must carry a heading for the current VERSION (release completeness)
 //   each skill's frontmatter (name + description) defines the shared Agent
-//   Skills boundary consumed natively by Codex, Prime, opencode, and Gemini CLI
+//   Skills boundary consumed natively by Codex, Prime, opencode, Gemini CLI, and ZCode
 //   each public skill's menu-description
 //     -> its Codex prompt stub in plugins/pstack/.codex-plugin/prompts/
 //     -> its row in README.md's "Slash commands" table
 //   plugins/pstack/models.json (the model policy: role defaults, diverse panel,
-//   available slugs, Codex equivalents)
+//   available slugs, Codex and ZCode equivalents)
 //     -> each model-consuming skill's "## Models" section
 //     -> setup-pstack's override-sheet block and interrogate's reviewer table
 //     -> the "## Model names" section of poteto-mode/references/codex-tools.md
+//     -> the "## Model names" section of poteto-mode/references/zcode-tools.md
 //   plugins/pstack/agents/{poteto-agent,comment-sicko}.md, LICENSE,
 //   LICENSE-cursor-team-kit, and NOTICE-skills.md
 //     -> portable copies under poteto-mode/references/{agents,licenses}/
@@ -24,7 +25,10 @@
 //
 // Also validated: .agents/plugins/marketplace.json points at a real plugin
 // directory whose Codex manifest name matches (it carries no version; Codex
-// reads the version from .codex-plugin/plugin.json).
+// reads the version from .codex-plugin/plugin.json). The ZCode manifest
+// declares skills, agents, and hooks directories and no commands component
+// (ZCode renders user-invocable skills as slash commands itself; command
+// stubs would recreate the 0.9.13 duplicate-menu collision).
 
 import {
   existsSync,
@@ -49,6 +53,7 @@ const VERSIONED_MANIFESTS = [
   ".claude-plugin/marketplace.json",
   "plugins/pstack/.claude-plugin/plugin.json",
   "plugins/pstack/.codex-plugin/plugin.json",
+  "plugins/pstack/.zcode-plugin/plugin.json",
 ];
 
 export const PORTABLE_ASSETS = [
@@ -172,6 +177,27 @@ export function validateCodexMarketplace(text, { expectedName, pathExists }) {
   const path = plugin.source?.path;
   if (!path || !pathExists(path)) {
     throw new Error(`.agents/plugins/marketplace.json: source.path "${path}" does not resolve to a directory`);
+  }
+}
+
+// The ZCode manifest declares the plugin's components explicitly. Skills,
+// agents, and hooks must resolve to real directories inside the plugin, and a
+// "commands" component must not appear: ZCode renders user-invocable skills
+// as slash commands itself, so stubs would recreate the duplicate-menu
+// collision the 0.9.13 release removed for Claude Code.
+export function validateZcodeManifest(text, { expectedName, dirExists }) {
+  const manifest = JSON.parse(text);
+  if (manifest.name !== expectedName) {
+    throw new Error(`.zcode-plugin/plugin.json: name "${manifest.name}" != "${expectedName}"`);
+  }
+  if (manifest.commands !== undefined) {
+    throw new Error(`.zcode-plugin/plugin.json: declares "commands"; ZCode serves skills as slash commands already`);
+  }
+  for (const key of ["skills", "agents", "hooks"]) {
+    const path = manifest[key];
+    if (typeof path !== "string" || !dirExists(path)) {
+      throw new Error(`.zcode-plugin/plugin.json: "${key}" ("${path}") does not resolve to a directory in the plugin`);
+    }
   }
 }
 
@@ -315,6 +341,22 @@ export function codexModelNamesSection(models) {
     `on ChatGPT is ${codeList(models.codex.panelQuad)}. If only one model family is reachable, vary reasoning ` +
     "effort and note in the verdict that diversity was reduced.\n\n" +
     "`/setup-pstack` writes the configured model list. On Codex, set it to your Codex model slugs."
+  );
+}
+
+export function zcodeModelNamesSection(models) {
+  return (
+    "Skills name Claude defaults (a single-role default for code/prose/judgment plus a diverse-model panel for " +
+    "diverse-model panels; each model-consuming skill lists its own in a Models section). These slugs do not " +
+    "resolve on ZCode. Use your configured ZCode models:\n\n" +
+    `- Single-model roles: your configured ZCode model (for example ${code(models.zcode.singleRoleExample)}).\n` +
+    "- Diverse-model panels (`arena`, `architect`, `interrogate`, `how` critics, `reflect`): the ZCode `Agent` " +
+    "tool takes no `model` parameter, so every panelist runs on the session model. Keep the diversity the " +
+    "prompts create (distinct briefs, adversarial angles) and note in the verdict that model diversity was " +
+    "reduced.\n\n" +
+    "`/setup-pstack`'s model sheet has no ZCode analog — the `Agent` tool takes no `model` parameter. " +
+    "Its ZCode form is `~/.zcode/pstack-roles.md`: the same role rows, each holding a `subagent_type` list " +
+    "the skills read on demand (see Subagent policy above)."
   );
 }
 
@@ -480,6 +522,12 @@ function main() {
     const next = replaceSection(text, "Model names", codexModelNamesSection(models), path);
     if (stampFile(path, next, "poteto-mode/references/codex-tools.md (models)")) modelStamps++;
   }
+  {
+    const path = join(skillsDir, "poteto-mode/references/zcode-tools.md");
+    const text = readFileSync(path, "utf8");
+    const next = replaceSection(text, "Model names", zcodeModelNamesSection(models), path);
+    if (stampFile(path, next, "poteto-mode/references/zcode-tools.md (models)")) modelStamps++;
+  }
   if (modelStamps === 0) console.log("ok: model-policy sections current");
 
   const strays = [];
@@ -549,6 +597,15 @@ function main() {
     pathExists: (p) => existsSync(join(repo, p)),
   });
   console.log("ok: .agents/plugins/marketplace.json names the plugin and points at a real path");
+
+  validateZcodeManifest(readFileSync(join(repo, "plugins/pstack/.zcode-plugin/plugin.json"), "utf8"), {
+    expectedName: "pstack",
+    dirExists: (p) => {
+      const full = join(repo, "plugins/pstack", p);
+      return existsSync(full) && statSync(full).isDirectory();
+    },
+  });
+  console.log("ok: .zcode-plugin/plugin.json names the plugin, declares real component dirs, no commands");
 
   const pluginRoot = join(repo, "plugins/pstack");
   validateHooks(readFileSync(join(pluginRoot, "hooks/hooks.json"), "utf8"), {
