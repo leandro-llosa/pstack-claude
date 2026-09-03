@@ -230,6 +230,21 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
                 },
               },
               {
+                id: "zcode-run",
+                isResolved: false,
+                comments: {
+                  nodes: [
+                    {
+                      body: "ZCODE_AUTOMATION_ID: run-4 severity high",
+                      createdAt: "now",
+                      path: null,
+                      line: null,
+                      author: { login: "zcode" },
+                    },
+                  ],
+                },
+              },
+              {
                 id: "resolved",
                 isResolved: true,
                 comments: {
@@ -251,9 +266,9 @@ it("annotates Bugbot threads with distinct review-pass counts", () => {
     },
   };
   const threads = parseReviewThreads(response);
-  expect(threads).toHaveLength(2);
-  expect(threads.map((thread) => thread.isBugbot)).toEqual([true, true]);
-  expect(threads.map((thread) => thread.bugbotReviewPasses)).toEqual([3, 3]);
+  expect(threads).toHaveLength(3);
+  expect(threads.map((thread) => thread.isBugbot)).toEqual([true, true, true]);
+  expect(threads.map((thread) => thread.bugbotReviewPasses)).toEqual([4, 4, 4]);
 });
 
 describe("context and stack discovery", () => {

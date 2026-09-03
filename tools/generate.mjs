@@ -354,8 +354,9 @@ export function zcodeModelNamesSection(models) {
     "tool takes no `model` parameter, so every panelist runs on the session model. Keep the diversity the " +
     "prompts create (distinct briefs, adversarial angles) and note in the verdict that model diversity was " +
     "reduced.\n\n" +
-    "`/setup-pstack`'s override sheet is Claude-only; ZCode has no per-role model override mechanism. Put a " +
-    "standing model policy in your `AGENTS.md` instead."
+    "`/setup-pstack`'s model sheet has no ZCode analog — the `Agent` tool takes no `model` parameter. " +
+    "Its ZCode form is `~/.zcode/pstack-roles.md`: the same role rows, each holding a `subagent_type` list " +
+    "the skills read on demand (see Subagent policy above)."
   );
 }
 
